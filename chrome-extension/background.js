@@ -452,7 +452,51 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (msg.type === "DELETE_TOKEN") {
+    chrome.storage.sync.remove("githubToken", () => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
+  if (msg.type === "VALIDATE_TOKEN") {
+    validateToken(msg.token).then(sendResponse).catch((err) =>
+      sendResponse({ valid: false, error: err.message })
+    );
+    return true;
+  }
 });
+
+const MIN_STARS_THRESHOLD = 10;
+
+async function validateToken(token) {
+  try {
+    const resp = await fetch("https://api.github.com/user", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!resp.ok) return { valid: false, error: `HTTP ${resp.status}` };
+    const data = await resp.json();
+    const rateResp = await fetch("https://api.github.com/rate_limit", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const rateData = rateResp.ok ? await rateResp.json() : null;
+    return {
+      valid: true,
+      user: data.login,
+      rateLimit: rateData ? rateData.rate.limit : null,
+      rateRemaining: rateData ? rateData.rate.remaining : null,
+    };
+  } catch (err) {
+    return { valid: false, error: err.message };
+  }
+}
 
 async function handleAnalyze(owner, repo, pageData) {
   const { githubToken } = await chrome.storage.sync.get("githubToken");
@@ -478,6 +522,11 @@ async function handleAnalyze(owner, repo, pageData) {
     }
   } else {
     repoInfo = await fetchRepoInfo(owner, repo, token);
+  }
+
+  // Hide for repos with insufficient stars
+  if (repoInfo.stars < MIN_STARS_THRESHOLD) {
+    return { hide: true };
   }
 
   // Quick analysis with just ratios if stars < 50

@@ -6,7 +6,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      width: 340px;
+      width: 360px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       font-size: 13px;
       color: #1f2328;
@@ -20,16 +20,8 @@
       text-align: center;
     }
 
-    .header h1 {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .header .subtitle {
-      font-size: 11px;
-      opacity: 0.7;
-    }
+    .header h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .header .subtitle { font-size: 11px; opacity: 0.7; }
 
     .section {
       padding: 14px 16px;
@@ -45,48 +37,7 @@
       margin-bottom: 8px;
     }
 
-    .token-row {
-      display: flex;
-      gap: 6px;
-    }
-
-    .token-row input {
-      flex: 1;
-      padding: 6px 8px;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      font-size: 12px;
-      font-family: "SFMono-Regular", Consolas, monospace;
-    }
-
-    .token-row button {
-      padding: 6px 12px;
-      background: #1a1a2e;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 12px;
-      cursor: pointer;
-      font-weight: 600;
-    }
-
-    .token-row button:hover {
-      background: #2d2d50;
-    }
-
-    .status {
-      font-size: 11px;
-      margin-top: 6px;
-      color: #656d76;
-    }
-
-    .status.success { color: #116329; }
-    .status.error { color: #82071e; }
-
-    .manual-check {
-      display: flex;
-      gap: 6px;
-    }
+    .manual-check { display: flex; gap: 6px; }
 
     .manual-check input {
       flex: 1;
@@ -96,7 +47,7 @@
       font-size: 12px;
     }
 
-    .manual-check button {
+    button {
       padding: 6px 12px;
       background: #1a1a2e;
       color: #fff;
@@ -106,6 +57,28 @@
       cursor: pointer;
       font-weight: 600;
       white-space: nowrap;
+    }
+
+    button:hover { background: #2d2d50; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    button.btn-secondary {
+      background: #f6f8fa;
+      color: #1f2328;
+      border: 1px solid #d0d7de;
+    }
+    button.btn-secondary:hover { background: #eaeef2; }
+
+    button.btn-danger {
+      background: #ffebe9;
+      color: #82071e;
+      border: 1px solid #ff8182;
+    }
+    button.btn-danger:hover { background: #ffcecb; }
+
+    button.btn-small {
+      padding: 4px 8px;
+      font-size: 11px;
     }
 
     #result {
@@ -134,19 +107,10 @@
       border: 2px solid;
     }
 
-    #result .score-info .label {
-      font-weight: 600;
-      font-size: 14px;
-    }
+    #result .score-info .label { font-weight: 600; font-size: 14px; }
+    #result .score-info .score-num { font-size: 11px; color: #656d76; }
 
-    #result .score-info .score-num {
-      font-size: 11px;
-      color: #656d76;
-    }
-
-    #result .signal-list {
-      font-size: 12px;
-    }
+    #result .signal-list { font-size: 12px; }
 
     #result .signal-item {
       display: flex;
@@ -154,10 +118,7 @@
       padding: 4px 0;
       border-bottom: 1px solid #f0f0f0;
     }
-
-    #result .signal-item:last-child {
-      border-bottom: none;
-    }
+    #result .signal-item:last-child { border-bottom: none; }
 
     .signal-dot {
       display: inline-block;
@@ -166,7 +127,6 @@
       border-radius: 50%;
       margin-right: 4px;
     }
-
     .signal-dot.ok { background: #4ac26b; }
     .signal-dot.medium { background: #d4a72c; }
     .signal-dot.high { background: #ff4a4a; }
@@ -177,17 +137,77 @@
       color: #8b949e;
       text-align: center;
     }
+    .footer a { color: #0969da; text-decoration: none; }
 
-    .footer a {
+    .info-text { font-size: 11px; color: #656d76; line-height: 1.4; }
+
+    .status { font-size: 11px; margin-top: 6px; color: #656d76; }
+    .status.success { color: #116329; }
+    .status.error { color: #82071e; }
+
+    /* Token section */
+    .token-status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .token-status-bar.connected {
+      background: #dafbe1;
+      border: 1px solid #4ac26b;
+    }
+    .token-status-bar.disconnected {
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+    }
+    .token-status-bar .token-info {
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .token-status-bar .token-info .user {
+      font-weight: 700;
+    }
+    .token-status-bar .token-info .rate {
+      font-size: 10px;
+      color: #656d76;
+    }
+    .token-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .token-input-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .token-input-row input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    .create-token-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 11px;
       color: #0969da;
       text-decoration: none;
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 8px;
     }
-
-    .info-text {
-      font-size: 11px;
-      color: #656d76;
-      line-height: 1.4;
-    }
+    .create-token-link:hover { background: #eaeef2; }
   </style>
 </head>
 <body>
@@ -206,34 +226,56 @@
   </div>
 
   <div class="section">
+    <h3>GitHub Token</h3>
+
+    <!-- State: token connected -->
+    <div id="token-connected" style="display:none">
+      <div class="token-status-bar connected">
+        <div class="token-info">
+          <span class="user" id="token-user"></span>
+          <br><span class="rate" id="token-rate"></span>
+        </div>
+        <div class="token-actions">
+          <button class="btn-small btn-secondary" id="refresh-token-btn" title="Refresh token status">Refresh</button>
+          <button class="btn-small btn-danger" id="delete-token-btn" title="Remove token">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- State: no token -->
+    <div id="token-disconnected">
+      <div class="token-status-bar disconnected">
+        <div class="token-info">No token &mdash; using 60 requests/hour</div>
+      </div>
+      <a class="create-token-link" id="create-token-link">
+        Create token on GitHub (1 click)
+      </a>
+      <div class="token-input-row">
+        <input type="password" id="token-input" placeholder="Paste token here (ghp_...)">
+        <button id="save-token">Save</button>
+      </div>
+      <div class="status" id="token-status"></div>
+      <p class="info-text" style="margin-top: 4px;">
+        Optional. Token only needs read-only <code>public_repo</code> access.<br>
+        Increases limit to 5,000 requests/hour for deeper analysis.
+      </p>
+    </div>
+  </div>
+
+  <div class="section">
     <h3>How It Works</h3>
     <p class="info-text">
       Based on <strong>CMU's StarScout</strong> (ICSE 2026) research that identified 6M fake stars.
       Analyzes fork/star ratio, watcher/star ratio, and samples stargazer profiles for
       empty accounts, zero followers, default avatars, and ghost patterns.
       <br><br>
-      Works automatically on any GitHub repo page you visit. No setup required.
+      Automatically appears on any GitHub repo with 10+ stars. No setup required.
     </p>
   </div>
 
-  <div class="section">
-    <details>
-      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:#656d76;text-transform:uppercase;letter-spacing:0.5px;">
-        Advanced: GitHub Token (optional)
-      </summary>
-      <p class="info-text" style="margin:8px 0 6px;">
-        No token needed for public repos. Add one only for heavier analysis (5,000 vs 60 requests/hour).
-      </p>
-      <div class="token-row">
-        <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxx">
-        <button id="save-token">Save</button>
-      </div>
-      <div class="status" id="token-status"></div>
-    </details>
-  </div>
-
   <div class="footer">
-    RealStars v1.0 &mdash; <a href="https://arxiv.org/abs/2412.13459" target="_blank">Research Paper</a>
+    RealStars v1.0 &mdash; <a href="https://github.com/mercurialsolo/realstars" target="_blank">GitHub</a>
+    &middot; <a href="https://arxiv.org/abs/2412.13459" target="_blank">Research Paper</a>
   </div>
 
   <script src="popup.js"></script>

@@ -4,6 +4,7 @@
 (function () {
   "use strict";
 
+  const MIN_STARS = 10; // Don't show badge for repos with fewer stars
   let currentRepo = null;
   let panelOpen = false;
 
@@ -12,7 +13,6 @@
     if (!match) return null;
     const owner = match[1];
     const repo = match[2];
-    // Exclude GitHub UI paths
     const excluded = [
       "settings",
       "marketplace",
@@ -32,56 +32,52 @@
     return { owner, repo };
   }
 
-  function createBadge() {
-    const existing = document.getElementById("realstars-badge");
-    if (existing) existing.remove();
+  function removeBadge() {
+    const badge = document.getElementById("realstars-badge");
+    if (badge) badge.remove();
+    const panel = document.getElementById("realstars-panel");
+    if (panel) panel.remove();
+    panelOpen = false;
+  }
 
+  function createBadge() {
+    removeBadge();
     const badge = document.createElement("span");
     badge.id = "realstars-badge";
     badge.className = "loading";
-    badge.innerHTML = '<span class="rs-icon">&#x27F3;</span> Checking stars...';
+    badge.innerHTML = '<span class="rs-icon">&#x27F3;</span> Checking...';
     badge.addEventListener("click", togglePanel);
     return badge;
   }
 
   function injectBadge(badge) {
-    // Strategy 1: Find the Watch/Fork/Star button row (ul.pagehead-actions or the flex container)
-    // and append badge as a sibling list item or flex child
-    const starButton =
-      document.querySelector('[data-view-component="true"].starring-container') ||
-      document.querySelector(".starring-container") ||
-      document.querySelector('[aria-label="Star this repository"]')?.closest("div");
+    // GitHub DOM structure (verified via inspection):
+    //   <div class="d-flex flex-nowrap flex-justify-end ...">   <-- flex parent
+    //     <div id="repository-details-container" class="flex-shrink-0">
+    //       <ul class="pagehead-actions ... d-md-inline">
+    //         <li style="float:left">Pin</li>
+    //         <li style="float:left">Watch</li>
+    //         <li style="float:left">Fork</li>
+    //         <li style="float:left">Star</li>
+    //       </ul>
+    //     </div>
+    //   </div>
+    //
+    // The <ul> uses float-based layout (not flex), so adding children causes wrapping.
+    // Instead, inject the badge as a sibling of #repository-details-container
+    // inside the flex-nowrap parent — guaranteed inline.
 
-    if (starButton) {
-      // Walk up to find the flex row that contains Watch/Fork/Star
-      const buttonRow = starButton.closest("ul") || starButton.parentElement;
-
-      if (buttonRow) {
-        // Force the row to not wrap so badge stays inline
-        buttonRow.style.flexWrap = "nowrap";
-        buttonRow.style.alignItems = "center";
-
-        // If it's a <ul>, wrap badge in <li> to match siblings
-        if (buttonRow.tagName === "UL") {
-          const li = document.createElement("li");
-          li.appendChild(badge);
-          buttonRow.appendChild(li);
-        } else {
-          buttonRow.appendChild(badge);
-        }
-        return true;
-      }
+    const detailsContainer = document.getElementById("repository-details-container");
+    if (detailsContainer && detailsContainer.parentElement) {
+      const flexParent = detailsContainer.parentElement;
+      flexParent.appendChild(badge);
+      return true;
     }
 
-    // Strategy 2: Fallback — find the page-level action bar
-    const actionBar =
-      document.querySelector(".pagehead-actions") ||
-      document.querySelector("[class*='BtnGroup']")?.parentElement;
-
-    if (actionBar) {
-      actionBar.style.flexWrap = "nowrap";
-      actionBar.style.alignItems = "center";
-      actionBar.appendChild(badge);
+    // Fallback: look for the pagehead-actions UL's parent
+    const ul = document.querySelector("ul.pagehead-actions");
+    if (ul && ul.parentElement && ul.parentElement.parentElement) {
+      ul.parentElement.parentElement.appendChild(badge);
       return true;
     }
 
@@ -91,6 +87,12 @@
   function updateBadge(result) {
     const badge = document.getElementById("realstars-badge");
     if (!badge) return;
+
+    // Hide badge if insufficient data
+    if (result.hide) {
+      removeBadge();
+      return;
+    }
 
     if (result.error && !result.trust) {
       badge.className = "loading";
@@ -138,7 +140,6 @@
     const result = JSON.parse(badge.dataset.result);
     panel = createPanel(result);
     document.body.appendChild(panel);
-    // Trigger reflow for animation
     panel.offsetHeight;
     panel.classList.remove("hidden");
     panelOpen = true;
@@ -225,7 +226,7 @@
           <span class="rs-score-num">${trust.score}/100</span>
         </div>
         <div class="rs-label">${trust.label}</div>
-        ${smallRepo ? '<div style="font-size:11px;color:#656d76;margin-top:6px;">Small repo (&lt;50 stars) — limited analysis</div>' : ""}
+        ${smallRepo ? '<div style="font-size:11px;color:#656d76;margin-top:6px;">Small repo — limited analysis</div>' : ""}
       </div>
       <div class="rs-stats">
         <h3>Repository Metrics</h3>
@@ -279,10 +280,8 @@
   }
 
   function scrapePageCounts() {
-    // Try to read star/fork/watch counts directly from the page DOM
     let stars = null, forks = null, watchers = null;
 
-    // Stars — look for the counter near the Star button
     const starCounter =
       document.querySelector("#repo-stars-counter-star") ||
       document.querySelector("[id*='star-button'] .Counter") ||
@@ -290,14 +289,12 @@
       document.querySelector("a[href$='/stargazers'] .Counter");
     if (starCounter) stars = parseCount(starCounter.textContent);
 
-    // Forks — counter near Fork button
     const forkCounter =
       document.querySelector("#repo-network-counter") ||
       document.querySelector("a[href$='/forks'] .Counter") ||
       document.querySelector(".forks .Counter");
     if (forkCounter) forks = parseCount(forkCounter.textContent);
 
-    // Watchers — counter near Watch button
     const watchCounter =
       document.querySelector("a[href$='/watchers'] .Counter") ||
       document.querySelector(".watchers .Counter");
@@ -310,19 +307,18 @@
     const repo = getRepoFromUrl();
     if (!repo) return;
 
-    // Avoid re-analyzing the same repo
     const repoKey = `${repo.owner}/${repo.repo}`;
     if (currentRepo === repoKey && document.getElementById("realstars-badge"))
       return;
     currentRepo = repoKey;
 
-    // Remove old panel
-    const oldPanel = document.getElementById("realstars-panel");
-    if (oldPanel) oldPanel.remove();
-    panelOpen = false;
+    removeBadge();
+
+    // Quick check: if we can read star count from the page and it's < MIN_STARS, skip
+    const pageData = scrapePageCounts();
+    if (pageData.stars !== null && pageData.stars < MIN_STARS) return;
 
     const badge = createBadge();
-    // Retry injection a few times (GitHub loads dynamically)
     let injected = false;
     for (let i = 0; i < 5; i++) {
       injected = injectBadge(badge);
@@ -330,9 +326,6 @@
       await new Promise((r) => setTimeout(r, 500));
     }
     if (!injected) return;
-
-    // Scrape counts from the page to save API calls
-    const pageData = scrapePageCounts();
 
     try {
       const result = await chrome.runtime.sendMessage({
@@ -347,7 +340,6 @@
     }
   }
 
-  // Run on page load
   analyzeCurrentPage();
 
   // Re-run on SPA navigation (GitHub uses Turbo/pjax)

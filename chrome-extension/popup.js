@@ -1,35 +1,147 @@
 // RealStars - Popup Script
 
+// GitHub token creation URL with pre-selected scopes (read-only public_repo)
+const TOKEN_CREATE_URL =
+  "https://github.com/settings/tokens/new?description=RealStars%20Star%20Fact%20Checker&scopes=public_repo";
+
 document.addEventListener("DOMContentLoaded", () => {
   const tokenInput = document.getElementById("token-input");
   const saveTokenBtn = document.getElementById("save-token");
   const tokenStatus = document.getElementById("token-status");
+  const createTokenLink = document.getElementById("create-token-link");
+  const deleteTokenBtn = document.getElementById("delete-token-btn");
+  const refreshTokenBtn = document.getElementById("refresh-token-btn");
+  const connectedDiv = document.getElementById("token-connected");
+  const disconnectedDiv = document.getElementById("token-disconnected");
+  const tokenUserSpan = document.getElementById("token-user");
+  const tokenRateSpan = document.getElementById("token-rate");
   const repoInput = document.getElementById("repo-input");
   const checkBtn = document.getElementById("check-btn");
   const resultDiv = document.getElementById("result");
 
-  // Load saved token
+  // --- Token Management ---
+
+  function showConnected(user, rateLimit, rateRemaining) {
+    connectedDiv.style.display = "block";
+    disconnectedDiv.style.display = "none";
+    tokenUserSpan.textContent = user;
+    if (rateLimit != null) {
+      tokenRateSpan.textContent = `${rateRemaining.toLocaleString()} / ${rateLimit.toLocaleString()} requests remaining`;
+    } else {
+      tokenRateSpan.textContent = "5,000 requests/hour";
+    }
+  }
+
+  function showDisconnected() {
+    connectedDiv.style.display = "none";
+    disconnectedDiv.style.display = "block";
+    tokenInput.value = "";
+    tokenStatus.textContent = "";
+    tokenStatus.className = "status";
+  }
+
+  // Load saved token and validate on popup open
   chrome.runtime.sendMessage({ type: "GET_TOKEN" }, (resp) => {
     if (resp && resp.token) {
-      tokenInput.value = resp.token;
-      tokenStatus.textContent = "Token saved";
-      tokenStatus.className = "status success";
+      // Validate the saved token
+      chrome.runtime.sendMessage(
+        { type: "VALIDATE_TOKEN", token: resp.token },
+        (validation) => {
+          if (validation && validation.valid) {
+            showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
+          } else {
+            showDisconnected();
+            tokenStatus.textContent = "Saved token is invalid. Please create a new one.";
+            tokenStatus.className = "status error";
+          }
+        }
+      );
+    } else {
+      showDisconnected();
     }
   });
 
+  // 1-click: open GitHub token creation page with pre-filled permissions
+  createTokenLink.addEventListener("click", () => {
+    chrome.tabs.create({ url: TOKEN_CREATE_URL });
+  });
+
+  // Save token
   saveTokenBtn.addEventListener("click", () => {
     const token = tokenInput.value.trim();
-    chrome.runtime.sendMessage({ type: "SET_TOKEN", token }, () => {
-      tokenStatus.textContent = token ? "Token saved!" : "Token cleared";
-      tokenStatus.className = "status success";
+    if (!token) {
+      tokenStatus.textContent = "Please enter a token.";
+      tokenStatus.className = "status error";
+      return;
+    }
+
+    saveTokenBtn.disabled = true;
+    saveTokenBtn.textContent = "Validating...";
+    tokenStatus.textContent = "";
+
+    chrome.runtime.sendMessage(
+      { type: "VALIDATE_TOKEN", token },
+      (validation) => {
+        saveTokenBtn.disabled = false;
+        saveTokenBtn.textContent = "Save";
+
+        if (validation && validation.valid) {
+          chrome.runtime.sendMessage({ type: "SET_TOKEN", token }, () => {
+            showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
+          });
+        } else {
+          tokenStatus.textContent = `Invalid token: ${validation?.error || "unknown error"}`;
+          tokenStatus.className = "status error";
+        }
+      }
+    );
+  });
+
+  // Delete token
+  deleteTokenBtn.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ type: "DELETE_TOKEN" }, () => {
+      showDisconnected();
     });
   });
 
+  // Refresh token status
+  refreshTokenBtn.addEventListener("click", () => {
+    refreshTokenBtn.disabled = true;
+    refreshTokenBtn.textContent = "...";
+    chrome.runtime.sendMessage({ type: "GET_TOKEN" }, (resp) => {
+      if (resp && resp.token) {
+        chrome.runtime.sendMessage(
+          { type: "VALIDATE_TOKEN", token: resp.token },
+          (validation) => {
+            refreshTokenBtn.disabled = false;
+            refreshTokenBtn.textContent = "Refresh";
+            if (validation && validation.valid) {
+              showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
+            } else {
+              showDisconnected();
+              tokenStatus.textContent = "Token expired or revoked. Please create a new one.";
+              tokenStatus.className = "status error";
+            }
+          }
+        );
+      } else {
+        refreshTokenBtn.disabled = false;
+        refreshTokenBtn.textContent = "Refresh";
+        showDisconnected();
+      }
+    });
+  });
+
+  // Allow Enter in token input
+  tokenInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveTokenBtn.click();
+  });
+
+  // --- Repo Check ---
+
   checkBtn.addEventListener("click", async () => {
     const input = repoInput.value.trim();
-    const match = input.match(
-      /(?:github\.com\/)?([^/\s]+)\/([^/\s#?]+)/
-    );
+    const match = input.match(/(?:github\.com\/)?([^/\s]+)\/([^/\s#?]+)/);
     if (!match) {
       resultDiv.style.display = "block";
       resultDiv.innerHTML =
@@ -61,13 +173,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Allow Enter key
   repoInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") checkBtn.click();
   });
 
   function renderResult(result) {
-    if (result.error) {
+    if (result.hide) {
+      resultDiv.innerHTML =
+        '<div class="status">Repo has fewer than 10 stars — not enough data to analyze.</div>';
+      return;
+    }
+
+    if (result.error && !result.trust) {
       if (result.error === "rate_limited") {
         const resetTime = new Date(result.resetAt * 1000).toLocaleTimeString();
         resultDiv.innerHTML = `<div class="status error">Rate limited. Resets at ${resetTime}. Add a GitHub token for higher limits.</div>`;
