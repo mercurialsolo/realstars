@@ -1,0 +1,10 @@
+{
+  "name": "realstars",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Detects fake GitHub stars using signals from CMU's StarScout research",
+  "scripts": {
+    "test": "node --test tests/**/*.test.js"
+  }
+}
