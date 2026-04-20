@@ -1,0 +1,296 @@
+/* RealStars - Content Script Styles */
+
+#realstars-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  cursor: pointer;
+  border: 1px solid;
+  margin-left: 8px;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 100;
+}
+
+#realstars-badge:hover {
+  transform: scale(1.05);
+}
+
+#realstars-badge.grade-A {
+  background: #dafbe1;
+  color: #116329;
+  border-color: #4ac26b;
+}
+
+#realstars-badge.grade-B {
+  background: #ddf4ff;
+  color: #0550ae;
+  border-color: #54aeff;
+}
+
+#realstars-badge.grade-C {
+  background: #fff8c5;
+  color: #6a5300;
+  border-color: #d4a72c;
+}
+
+#realstars-badge.grade-D {
+  background: #ffebe9;
+  color: #82071e;
+  border-color: #ff8182;
+}
+
+#realstars-badge.grade-F {
+  background: #ffcecb;
+  color: #6e011a;
+  border-color: #ff4a4a;
+}
+
+#realstars-badge.loading {
+  background: #f6f8fa;
+  color: #656d76;
+  border-color: #d0d7de;
+}
+
+#realstars-badge .rs-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Detail panel that appears on click */
+#realstars-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  background: #ffffff;
+  border-left: 1px solid #d0d7de;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.1);
+  z-index: 10000;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  transition: transform 0.3s ease;
+}
+
+#realstars-panel.hidden {
+  transform: translateX(100%);
+}
+
+#realstars-panel .rs-header {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  padding: 16px 20px;
+  border-bottom: 1px solid #d0d7de;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 1;
+}
+
+#realstars-panel .rs-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2328;
+}
+
+#realstars-panel .rs-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #656d76;
+  padding: 4px;
+  line-height: 1;
+}
+
+#realstars-panel .rs-close:hover {
+  color: #1f2328;
+}
+
+#realstars-panel .rs-score-section {
+  padding: 20px;
+  text-align: center;
+  border-bottom: 1px solid #d0d7de;
+}
+
+#realstars-panel .rs-score-circle {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  border: 3px solid;
+}
+
+#realstars-panel .rs-score-circle .rs-grade {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#realstars-panel .rs-score-circle .rs-score-num {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+#realstars-panel .rs-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2328;
+}
+
+#realstars-panel .rs-stats {
+  padding: 16px 20px;
+  border-bottom: 1px solid #d0d7de;
+}
+
+#realstars-panel .rs-stats h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #656d76;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#realstars-panel .rs-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+#realstars-panel .rs-stat-row .rs-stat-label {
+  color: #656d76;
+}
+
+#realstars-panel .rs-stat-row .rs-stat-value {
+  font-weight: 600;
+  color: #1f2328;
+}
+
+#realstars-panel .rs-signals {
+  padding: 16px 20px;
+}
+
+#realstars-panel .rs-signals h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #656d76;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#realstars-panel .rs-signal {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border-left: 3px solid;
+}
+
+#realstars-panel .rs-signal.severity-ok {
+  background: #dafbe1;
+  border-left-color: #4ac26b;
+}
+
+#realstars-panel .rs-signal.severity-medium {
+  background: #fff8c5;
+  border-left-color: #d4a72c;
+}
+
+#realstars-panel .rs-signal.severity-high {
+  background: #ffebe9;
+  border-left-color: #ff4a4a;
+}
+
+#realstars-panel .rs-signal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2328;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#realstars-panel .rs-signal-value {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+#realstars-panel .rs-signal-detail {
+  font-size: 11px;
+  color: #656d76;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+#realstars-panel .rs-footer {
+  padding: 16px 20px;
+  font-size: 11px;
+  color: #8b949e;
+  text-align: center;
+  border-top: 1px solid #d0d7de;
+}
+
+#realstars-panel .rs-footer a {
+  color: #0969da;
+  text-decoration: none;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  #realstars-panel {
+    background: #0d1117;
+    border-left-color: #30363d;
+  }
+
+  #realstars-panel .rs-header {
+    background: #0d1117;
+    border-bottom-color: #30363d;
+  }
+
+  #realstars-panel .rs-header h2 {
+    color: #e6edf3;
+  }
+
+  #realstars-panel .rs-label {
+    color: #e6edf3;
+  }
+
+  #realstars-panel .rs-stat-row .rs-stat-value,
+  #realstars-panel .rs-signal-title {
+    color: #e6edf3;
+  }
+
+  #realstars-panel .rs-stats,
+  #realstars-panel .rs-score-section {
+    border-bottom-color: #30363d;
+  }
+
+  #realstars-panel .rs-footer {
+    border-top-color: #30363d;
+  }
+}
+
+/* Spinner animation */
+@keyframes rs-spin {
+  to { transform: rotate(360deg); }
+}
+
+#realstars-badge.loading .rs-icon {
+  display: inline-block;
+  animation: rs-spin 1s linear infinite;
+}

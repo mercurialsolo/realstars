@@ -1,0 +1,9 @@
+{
+  "name": "realstars",
+  "displayName": "RealStars - GitHub Star Fact Checker",
+  "description": "Detects fake GitHub stars using CMU StarScout methodology. Analyzes fork/star ratios, watcher/star ratios, and stargazer profile quality to compute trust scores.",
+  "version": "1.0.0",
+  "author": "RealStars Contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/realstars-project/realstars"
+}

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      color: #1f2328;
+      background: #ffffff;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      color: #fff;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .header .subtitle {
+      font-size: 11px;
+      opacity: 0.7;
+    }
+
+    .section {
+      padding: 14px 16px;
+      border-bottom: 1px solid #d0d7de;
+    }
+
+    .section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: #656d76;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .token-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .token-row input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+
+    .token-row button {
+      padding: 6px 12px;
+      background: #1a1a2e;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .token-row button:hover {
+      background: #2d2d50;
+    }
+
+    .status {
+      font-size: 11px;
+      margin-top: 6px;
+      color: #656d76;
+    }
+
+    .status.success { color: #116329; }
+    .status.error { color: #82071e; }
+
+    .manual-check {
+      display: flex;
+      gap: 6px;
+    }
+
+    .manual-check input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .manual-check button {
+      padding: 6px 12px;
+      background: #1a1a2e;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    #result {
+      margin-top: 10px;
+      display: none;
+    }
+
+    #result .score-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+
+    #result .grade-display {
+      font-size: 28px;
+      font-weight: 700;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      border: 2px solid;
+    }
+
+    #result .score-info .label {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    #result .score-info .score-num {
+      font-size: 11px;
+      color: #656d76;
+    }
+
+    #result .signal-list {
+      font-size: 12px;
+    }
+
+    #result .signal-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    #result .signal-item:last-child {
+      border-bottom: none;
+    }
+
+    .signal-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-right: 4px;
+    }
+
+    .signal-dot.ok { background: #4ac26b; }
+    .signal-dot.medium { background: #d4a72c; }
+    .signal-dot.high { background: #ff4a4a; }
+
+    .footer {
+      padding: 10px 16px;
+      font-size: 10px;
+      color: #8b949e;
+      text-align: center;
+    }
+
+    .footer a {
+      color: #0969da;
+      text-decoration: none;
+    }
+
+    .info-text {
+      font-size: 11px;
+      color: #656d76;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>RealStars</h1>
+    <div class="subtitle">GitHub Star Fact Checker</div>
+  </div>
+
+  <div class="section">
+    <h3>GitHub Token (optional, increases API limit)</h3>
+    <div class="token-row">
+      <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxx">
+      <button id="save-token">Save</button>
+    </div>
+    <div class="status" id="token-status"></div>
+    <p class="info-text" style="margin-top: 6px;">
+      Without a token: 60 requests/hour.<br>
+      With a token: 5,000 requests/hour.<br>
+      Token only needs <code>public_repo</code> scope (read-only).
+    </p>
+  </div>
+
+  <div class="section">
+    <h3>Check Any Repo</h3>
+    <div class="manual-check">
+      <input type="text" id="repo-input" placeholder="owner/repo">
+      <button id="check-btn">Check</button>
+    </div>
+    <div id="result"></div>
+  </div>
+
+  <div class="section">
+    <h3>How It Works</h3>
+    <p class="info-text">
+      Based on <strong>CMU's StarScout</strong> (ICSE 2026) research that identified 6M fake stars.
+      Analyzes fork/star ratio, watcher/star ratio, and samples stargazer profiles for
+      empty accounts, zero followers, and ghost patterns.
+    </p>
+  </div>
+
+  <div class="footer">
+    RealStars v1.0 &mdash; <a href="https://arxiv.org/abs/2412.13459" target="_blank">Research Paper</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

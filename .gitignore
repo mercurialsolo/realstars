@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+*.crx
+*.pem
+*.zip
+web-ext-artifacts/
+
+# Environment
+.env
+.env.local
+
+# Generated icons (SVGs kept, PNGs are generated)
+chrome-extension/icons/*.svg
+
+# Icon generation helper
+chrome-extension/icons/generate-icons.html
+chrome-extension/icons/create-icons.js
