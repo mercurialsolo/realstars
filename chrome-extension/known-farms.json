@@ -1,0 +1,11 @@
+{
+  "_comment": "Community-maintained list of confirmed star-farm account patterns. Contribute via PR.",
+  "_updated": "2026-04-20",
+  "exactUsernames": [],
+  "usernamePatterns": [
+    "^[a-z]{2,3}[0-9]{6,}$",
+    "^user[0-9]{5,}$",
+    "^test(er)?[0-9]{4,}$",
+    "^[a-z]{8,12}[0-9]{4}$"
+  ]
+}
