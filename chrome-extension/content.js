@@ -45,25 +45,43 @@
   }
 
   function injectBadge(badge) {
-    // Try to inject near the star count button on GitHub
+    // Strategy 1: Find the Watch/Fork/Star button row (ul.pagehead-actions or the flex container)
+    // and append badge as a sibling list item or flex child
     const starButton =
       document.querySelector('[data-view-component="true"].starring-container') ||
       document.querySelector(".starring-container") ||
       document.querySelector('[aria-label="Star this repository"]')?.closest("div");
 
-    if (starButton && starButton.parentElement) {
-      starButton.parentElement.insertBefore(badge, starButton.nextSibling);
-      return true;
+    if (starButton) {
+      // Walk up to find the flex row that contains Watch/Fork/Star
+      const buttonRow = starButton.closest("ul") || starButton.parentElement;
+
+      if (buttonRow) {
+        // Force the row to not wrap so badge stays inline
+        buttonRow.style.flexWrap = "nowrap";
+        buttonRow.style.alignItems = "center";
+
+        // If it's a <ul>, wrap badge in <li> to match siblings
+        if (buttonRow.tagName === "UL") {
+          const li = document.createElement("li");
+          li.appendChild(badge);
+          buttonRow.appendChild(li);
+        } else {
+          buttonRow.appendChild(badge);
+        }
+        return true;
+      }
     }
 
-    // Fallback: inject into repo header area
-    const repoHeader =
-      document.querySelector(".AppHeader-context-full") ||
-      document.querySelector("[data-testid='repository-title']") ||
-      document.querySelector(".repohead");
+    // Strategy 2: Fallback — find the page-level action bar
+    const actionBar =
+      document.querySelector(".pagehead-actions") ||
+      document.querySelector("[class*='BtnGroup']")?.parentElement;
 
-    if (repoHeader) {
-      repoHeader.appendChild(badge);
+    if (actionBar) {
+      actionBar.style.flexWrap = "nowrap";
+      actionBar.style.alignItems = "center";
+      actionBar.appendChild(badge);
       return true;
     }
 
@@ -74,7 +92,7 @@
     const badge = document.getElementById("realstars-badge");
     if (!badge) return;
 
-    if (result.error) {
+    if (result.error && !result.trust) {
       badge.className = "loading";
       if (result.error === "rate_limited") {
         const resetTime = new Date(result.resetAt * 1000).toLocaleTimeString();
@@ -96,7 +114,8 @@
       F: "\uD83D\uDEA8",
     };
 
-    badge.innerHTML = `<span class="rs-icon">${gradeIcons[trust.grade]}</span> RealStars: ${trust.grade} (${trust.score}/100)`;
+    const suffix = result.rateLimited ? " (ratios only)" : "";
+    badge.innerHTML = `<span class="rs-icon">${gradeIcons[trust.grade]}</span> RealStars: ${trust.grade} (${trust.score}/100)${suffix}`;
     badge.dataset.result = JSON.stringify(result);
   }
 
@@ -152,6 +171,14 @@
           <div class="rs-stat-row">
             <span class="rs-stat-label">Zero followers</span>
             <span class="rs-stat-value">${stargazerAnalysis.zeroFollowersPercent}%</span>
+          </div>
+          <div class="rs-stat-row">
+            <span class="rs-stat-label">Zero-activity accounts</span>
+            <span class="rs-stat-value">${stargazerAnalysis.zeroStarsPercent}%</span>
+          </div>
+          <div class="rs-stat-row">
+            <span class="rs-stat-label">Default avatar (no picture)</span>
+            <span class="rs-stat-value">${stargazerAnalysis.defaultAvatarPercent}%</span>
           </div>
           <div class="rs-stat-row">
             <span class="rs-stat-label">Ghost accounts</span>
@@ -242,6 +269,43 @@
     return panel;
   }
 
+  function parseCount(text) {
+    if (!text) return null;
+    text = text.trim().replace(/,/g, "");
+    if (text.endsWith("k")) return Math.round(parseFloat(text) * 1000);
+    if (text.endsWith("m")) return Math.round(parseFloat(text) * 1000000);
+    const n = parseInt(text, 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function scrapePageCounts() {
+    // Try to read star/fork/watch counts directly from the page DOM
+    let stars = null, forks = null, watchers = null;
+
+    // Stars — look for the counter near the Star button
+    const starCounter =
+      document.querySelector("#repo-stars-counter-star") ||
+      document.querySelector("[id*='star-button'] .Counter") ||
+      document.querySelector(".starring-container .Counter") ||
+      document.querySelector("a[href$='/stargazers'] .Counter");
+    if (starCounter) stars = parseCount(starCounter.textContent);
+
+    // Forks — counter near Fork button
+    const forkCounter =
+      document.querySelector("#repo-network-counter") ||
+      document.querySelector("a[href$='/forks'] .Counter") ||
+      document.querySelector(".forks .Counter");
+    if (forkCounter) forks = parseCount(forkCounter.textContent);
+
+    // Watchers — counter near Watch button
+    const watchCounter =
+      document.querySelector("a[href$='/watchers'] .Counter") ||
+      document.querySelector(".watchers .Counter");
+    if (watchCounter) watchers = parseCount(watchCounter.textContent);
+
+    return { stars, forks, watchers };
+  }
+
   async function analyzeCurrentPage() {
     const repo = getRepoFromUrl();
     if (!repo) return;
@@ -267,11 +331,15 @@
     }
     if (!injected) return;
 
+    // Scrape counts from the page to save API calls
+    const pageData = scrapePageCounts();
+
     try {
       const result = await chrome.runtime.sendMessage({
         type: "ANALYZE_REPO",
         owner: repo.owner,
         repo: repo.repo,
+        pageData,
       });
       updateBadge(result);
     } catch (err) {

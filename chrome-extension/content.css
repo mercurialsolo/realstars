@@ -4,17 +4,19 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 3px 10px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   cursor: pointer;
   border: 1px solid;
   margin-left: 8px;
+  flex-shrink: 0;
   transition: all 0.2s ease;
-  position: relative;
-  z-index: 100;
 }
 
 #realstars-badge:hover {

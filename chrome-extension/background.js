@@ -1,8 +1,12 @@
 // RealStars - Background Service Worker
 // Handles GitHub API calls to avoid CORS issues in content scripts
+// Works without authentication for public repos (60 req/hr).
+// With a token: 5,000 req/hr — optional for power users.
 
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour (generous cache to save API calls)
 const cache = new Map();
+let apiCallsThisHour = 0;
+let apiResetTime = 0;
 
 function getCached(key) {
   const entry = cache.get(key);
@@ -55,25 +59,22 @@ async function fetchRepoInfo(owner, repo, token) {
 }
 
 // Sample stargazers and analyze their profiles
-async function sampleStargazers(owner, repo, token, sampleSize = 100) {
-  const key = `stargazers:${owner}/${repo}`;
+async function sampleStargazers(owner, repo, token, sampleSize = 100, knownStarCount) {
+  const key = `stargazers:${owner}/${repo}:${sampleSize}`;
   const cached = getCached(key);
   if (cached) return cached;
 
-  // Get total pages of stargazers
   const perPage = 30;
-  const firstPage = await githubFetch(
-    `https://api.github.com/repos/${owner}/${repo}/stargazers?per_page=1`,
-    token
-  );
 
-  // Fetch multiple pages spread across the stargazer list
-  const totalStars = (
-    await githubFetch(
+  // Use known star count to avoid an extra API call
+  let totalStars = knownStarCount;
+  if (!totalStars) {
+    const repoData = await githubFetch(
       `https://api.github.com/repos/${owner}/${repo}`,
       token
-    )
-  ).stargazers_count;
+    );
+    totalStars = repoData.stargazers_count;
+  }
   const totalPages = Math.ceil(totalStars / perPage);
 
   // Pick pages spread evenly (beginning, middle, end)
@@ -134,12 +135,25 @@ async function sampleStargazers(owner, repo, token, sampleSize = 100) {
   return analysis;
 }
 
+function hasDefaultAvatar(avatarUrl) {
+  // GitHub auto-generated avatars (identicons) follow this pattern:
+  // https://avatars.githubusercontent.com/u/{id}?v=4
+  // Users who set a custom avatar get a different URL or have a hash in it.
+  // The simplest heuristic: identicons have no specific image hash parameter.
+  // Also, GitHub's generated avatars have no "?" or have just "?v=4" with no "s=" sizing param from user upload.
+  if (!avatarUrl) return true;
+  // Avatars with /u/ and no additional path segments are auto-generated identicons
+  return /\/u\/\d+\?/.test(avatarUrl) && !avatarUrl.includes("&s=");
+}
+
 function analyzeProfiles(profiles) {
   if (profiles.length === 0) {
     return {
       sampleSize: 0,
       zeroReposPercent: 0,
       zeroFollowersPercent: 0,
+      zeroStarsPercent: 0,
+      defaultAvatarPercent: 0,
       ghostPercent: 0,
       avgPublicRepos: 0,
       avgFollowers: 0,
@@ -150,7 +164,9 @@ function analyzeProfiles(profiles) {
   const now = Date.now();
   let zeroRepos = 0;
   let zeroFollowers = 0;
-  let ghosts = 0; // zero repos AND zero followers AND no bio
+  let zeroStars = 0; // accounts with 0 public gists and 0 repos (proxy for no starring activity)
+  let defaultAvatars = 0;
+  let ghosts = 0; // zero repos + zero followers + no bio + default avatar
   let totalRepos = 0;
   let totalFollowers = 0;
   const accountAges = [];
@@ -158,12 +174,18 @@ function analyzeProfiles(profiles) {
   for (const p of profiles) {
     const repos = p.public_repos || 0;
     const followers = p.followers || 0;
+    const following = p.following || 0;
+    const gists = p.public_gists || 0;
     const hasBio = !!(p.bio && p.bio.trim());
+    const isDefaultAvatar = hasDefaultAvatar(p.avatar_url);
     const ageDays = (now - new Date(p.created_at).getTime()) / 86400000;
 
     if (repos === 0) zeroRepos++;
     if (followers === 0) zeroFollowers++;
-    if (repos === 0 && followers === 0 && !hasBio) ghosts++;
+    if (repos === 0 && gists === 0 && following === 0) zeroStars++;
+    if (isDefaultAvatar) defaultAvatars++;
+    // Ghost = no repos, no followers, no bio, default avatar — a truly empty account
+    if (repos === 0 && followers === 0 && !hasBio && isDefaultAvatar) ghosts++;
 
     totalRepos += repos;
     totalFollowers += followers;
@@ -182,6 +204,8 @@ function analyzeProfiles(profiles) {
     sampleSize: profiles.length,
     zeroReposPercent: Math.round((zeroRepos / profiles.length) * 100),
     zeroFollowersPercent: Math.round((zeroFollowers / profiles.length) * 100),
+    zeroStarsPercent: Math.round((zeroStars / profiles.length) * 100),
+    defaultAvatarPercent: Math.round((defaultAvatars / profiles.length) * 100),
     ghostPercent: Math.round((ghosts / profiles.length) * 100),
     avgPublicRepos: Math.round((totalRepos / profiles.length) * 10) / 10,
     avgFollowers: Math.round((totalFollowers / profiles.length) * 10) / 10,
@@ -304,14 +328,66 @@ function computeTrustScore(repoInfo, stargazerAnalysis) {
       });
     }
 
-    // Ghost accounts (organic ~1%, fake 19-28%)
+    // Zero activity accounts (no repos, no gists, no following — just a star-bot)
+    if (stargazerAnalysis.zeroStarsPercent > 40) {
+      score -= 15;
+      signals.push({
+        signal: "High % zero-activity stargazers",
+        value: `${stargazerAnalysis.zeroStarsPercent}%`,
+        severity: "high",
+        detail: "Accounts with no repos, no gists, no following — only star.",
+      });
+    } else if (stargazerAnalysis.zeroStarsPercent > 15) {
+      score -= 7;
+      signals.push({
+        signal: "Elevated % zero-activity stargazers",
+        value: `${stargazerAnalysis.zeroStarsPercent}%`,
+        severity: "medium",
+        detail: "Accounts that exist solely to star repos.",
+      });
+    } else {
+      signals.push({
+        signal: "Zero-activity stargazers",
+        value: `${stargazerAnalysis.zeroStarsPercent}%`,
+        severity: "ok",
+        detail: "Low percentage of star-only accounts.",
+      });
+    }
+
+    // Default avatar (no custom profile picture — never personalized)
+    if (stargazerAnalysis.defaultAvatarPercent > 50) {
+      score -= 15;
+      signals.push({
+        signal: "High % default avatars",
+        value: `${stargazerAnalysis.defaultAvatarPercent}%`,
+        severity: "high",
+        detail: "Most stargazers never set a profile picture — bot signal.",
+      });
+    } else if (stargazerAnalysis.defaultAvatarPercent > 25) {
+      score -= 7;
+      signals.push({
+        signal: "Elevated % default avatars",
+        value: `${stargazerAnalysis.defaultAvatarPercent}%`,
+        severity: "medium",
+        detail: "Above typical rates for organic repos.",
+      });
+    } else {
+      signals.push({
+        signal: "Default avatars",
+        value: `${stargazerAnalysis.defaultAvatarPercent}%`,
+        severity: "ok",
+        detail: "Most stargazers have custom profile pictures.",
+      });
+    }
+
+    // Ghost accounts (organic ~1%, fake 19-28%) — now includes avatar check
     if (stargazerAnalysis.ghostPercent > 15) {
       score -= 20;
       signals.push({
         signal: "High % ghost accounts",
         value: `${stargazerAnalysis.ghostPercent}%`,
         severity: "high",
-        detail: "Organic: ~1%. Compromised repos: 19-28%.",
+        detail: "No repos, no followers, no bio, default avatar. Organic: ~1%.",
       });
     } else if (stargazerAnalysis.ghostPercent > 5) {
       score -= 8;
@@ -357,7 +433,7 @@ function computeTrustScore(repoInfo, stargazerAnalysis) {
 // Handle messages from content script and popup
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "ANALYZE_REPO") {
-    handleAnalyze(msg.owner, msg.repo).then(sendResponse).catch((err) =>
+    handleAnalyze(msg.owner, msg.repo, msg.pageData).then(sendResponse).catch((err) =>
       sendResponse({ error: err.message })
     );
     return true; // async response
@@ -378,11 +454,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-async function handleAnalyze(owner, repo) {
+async function handleAnalyze(owner, repo, pageData) {
   const { githubToken } = await chrome.storage.sync.get("githubToken");
   const token = githubToken || null;
+  const hasToken = !!token;
 
-  const repoInfo = await fetchRepoInfo(owner, repo, token);
+  let repoInfo;
+
+  // If content script sent us page-scraped data, use it to save 1 API call
+  if (pageData && pageData.stars != null) {
+    repoInfo = {
+      stars: pageData.stars,
+      forks: pageData.forks,
+      watchers: pageData.watchers,
+      openIssues: 0,
+      description: "",
+      createdAt: "",
+    };
+    // If page data is incomplete, supplement from API
+    if (repoInfo.watchers == null) {
+      const apiData = await fetchRepoInfo(owner, repo, token);
+      repoInfo.watchers = apiData.watchers;
+    }
+  } else {
+    repoInfo = await fetchRepoInfo(owner, repo, token);
+  }
 
   // Quick analysis with just ratios if stars < 50
   if (repoInfo.stars < 50) {
@@ -390,15 +486,29 @@ async function handleAnalyze(owner, repo) {
     return { repoInfo, stargazerAnalysis: null, trust: result, smallRepo: true };
   }
 
-  // For repos with 50+ stars, sample stargazer profiles
-  const sampleSize = repoInfo.stars > 10000 ? 100 : 60;
+  // Adjust sample size based on auth status to conserve API budget.
+  // Without token: 60 req/hr — use a small sample (20 profiles = ~25 API calls total).
+  // With token: 5,000 req/hr — use a larger sample for better accuracy.
+  const sampleSize = hasToken
+    ? (repoInfo.stars > 10000 ? 100 : 60)
+    : 20;
+
   let stargazerAnalysis = null;
   try {
-    stargazerAnalysis = await sampleStargazers(owner, repo, token, sampleSize);
+    stargazerAnalysis = await sampleStargazers(owner, repo, token, sampleSize, repoInfo.stars);
   } catch (e) {
     if (e.message.startsWith("RATE_LIMITED")) {
       const reset = e.message.split(":")[1];
-      return { error: "rate_limited", resetAt: parseInt(reset) };
+      // Still return ratio-based analysis even when rate limited
+      const trust = computeTrustScore(repoInfo, null);
+      return {
+        repoInfo,
+        stargazerAnalysis: null,
+        trust,
+        smallRepo: false,
+        rateLimited: true,
+        resetAt: parseInt(reset),
+      };
     }
     // Continue without stargazer analysis
   }

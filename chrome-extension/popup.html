@@ -197,23 +197,9 @@
   </div>
 
   <div class="section">
-    <h3>GitHub Token (optional, increases API limit)</h3>
-    <div class="token-row">
-      <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxx">
-      <button id="save-token">Save</button>
-    </div>
-    <div class="status" id="token-status"></div>
-    <p class="info-text" style="margin-top: 6px;">
-      Without a token: 60 requests/hour.<br>
-      With a token: 5,000 requests/hour.<br>
-      Token only needs <code>public_repo</code> scope (read-only).
-    </p>
-  </div>
-
-  <div class="section">
     <h3>Check Any Repo</h3>
     <div class="manual-check">
-      <input type="text" id="repo-input" placeholder="owner/repo">
+      <input type="text" id="repo-input" placeholder="owner/repo or GitHub URL">
       <button id="check-btn">Check</button>
     </div>
     <div id="result"></div>
@@ -224,8 +210,26 @@
     <p class="info-text">
       Based on <strong>CMU's StarScout</strong> (ICSE 2026) research that identified 6M fake stars.
       Analyzes fork/star ratio, watcher/star ratio, and samples stargazer profiles for
-      empty accounts, zero followers, and ghost patterns.
+      empty accounts, zero followers, default avatars, and ghost patterns.
+      <br><br>
+      Works automatically on any GitHub repo page you visit. No setup required.
     </p>
+  </div>
+
+  <div class="section">
+    <details>
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:#656d76;text-transform:uppercase;letter-spacing:0.5px;">
+        Advanced: GitHub Token (optional)
+      </summary>
+      <p class="info-text" style="margin:8px 0 6px;">
+        No token needed for public repos. Add one only for heavier analysis (5,000 vs 60 requests/hour).
+      </p>
+      <div class="token-row">
+        <input type="password" id="token-input" placeholder="ghp_xxxxxxxxxxxx">
+        <button id="save-token">Save</button>
+      </div>
+      <div class="status" id="token-status"></div>
+    </details>
   </div>
 
   <div class="footer">
