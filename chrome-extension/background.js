@@ -466,6 +466,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     );
     return true;
   }
+
+  // Fallback: always respond so the message port doesn't hang
+  sendResponse({ error: "unknown_message_type" });
+  return false;
 });
 
 const MIN_STARS_THRESHOLD = 10;

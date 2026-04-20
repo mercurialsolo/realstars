@@ -4,7 +4,20 @@
 const TOKEN_CREATE_URL =
   "https://github.com/settings/tokens/new?description=RealStars%20Star%20Fact%20Checker&scopes=public_repo";
 
-document.addEventListener("DOMContentLoaded", () => {
+// Promise wrapper for chrome.runtime.sendMessage to avoid callback nesting
+function sendMsg(msg) {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage(msg, (resp) => {
+      if (chrome.runtime.lastError) {
+        resolve({ _error: chrome.runtime.lastError.message });
+      } else {
+        resolve(resp);
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
   const tokenInput = document.getElementById("token-input");
   const saveTokenBtn = document.getElementById("save-token");
   const tokenStatus = document.getElementById("token-status");
@@ -19,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const checkBtn = document.getElementById("check-btn");
   const resultDiv = document.getElementById("result");
 
-  // --- Token Management ---
+  // --- Token UI helpers ---
 
   function showConnected(user, rateLimit, rateRemaining) {
     connectedDiv.style.display = "block";
@@ -32,34 +45,34 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function showDisconnected() {
+  function showDisconnected(message) {
     connectedDiv.style.display = "none";
     disconnectedDiv.style.display = "block";
     tokenInput.value = "";
-    tokenStatus.textContent = "";
-    tokenStatus.className = "status";
+    if (message) {
+      tokenStatus.textContent = message;
+      tokenStatus.className = "status error";
+    } else {
+      tokenStatus.textContent = "";
+      tokenStatus.className = "status";
+    }
   }
 
-  // Load saved token and validate on popup open
-  chrome.runtime.sendMessage({ type: "GET_TOKEN" }, (resp) => {
-    if (resp && resp.token) {
-      // Validate the saved token
-      chrome.runtime.sendMessage(
-        { type: "VALIDATE_TOKEN", token: resp.token },
-        (validation) => {
-          if (validation && validation.valid) {
-            showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
-          } else {
-            showDisconnected();
-            tokenStatus.textContent = "Saved token is invalid. Please create a new one.";
-            tokenStatus.className = "status error";
-          }
-        }
-      );
+  // --- Load saved token on popup open ---
+
+  const stored = await sendMsg({ type: "GET_TOKEN" });
+  if (stored && stored.token) {
+    const validation = await sendMsg({ type: "VALIDATE_TOKEN", token: stored.token });
+    if (validation && validation.valid) {
+      showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
     } else {
-      showDisconnected();
+      showDisconnected("Saved token is invalid. Please create a new one.");
     }
-  });
+  } else {
+    showDisconnected();
+  }
+
+  // --- Token actions ---
 
   // 1-click: open GitHub token creation page with pre-filled permissions
   createTokenLink.addEventListener("click", () => {
@@ -67,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Save token
-  saveTokenBtn.addEventListener("click", () => {
+  saveTokenBtn.addEventListener("click", async () => {
     const token = tokenInput.value.trim();
     if (!token) {
       tokenStatus.textContent = "Please enter a token.";
@@ -79,57 +92,45 @@ document.addEventListener("DOMContentLoaded", () => {
     saveTokenBtn.textContent = "Validating...";
     tokenStatus.textContent = "";
 
-    chrome.runtime.sendMessage(
-      { type: "VALIDATE_TOKEN", token },
-      (validation) => {
-        saveTokenBtn.disabled = false;
-        saveTokenBtn.textContent = "Save";
+    const validation = await sendMsg({ type: "VALIDATE_TOKEN", token });
+    saveTokenBtn.disabled = false;
+    saveTokenBtn.textContent = "Save";
 
-        if (validation && validation.valid) {
-          chrome.runtime.sendMessage({ type: "SET_TOKEN", token }, () => {
-            showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
-          });
-        } else {
-          tokenStatus.textContent = `Invalid token: ${validation?.error || "unknown error"}`;
-          tokenStatus.className = "status error";
-        }
-      }
-    );
+    if (validation && validation.valid) {
+      await sendMsg({ type: "SET_TOKEN", token });
+      showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
+    } else {
+      tokenStatus.textContent = `Invalid token: ${validation?.error || "unknown error"}`;
+      tokenStatus.className = "status error";
+    }
   });
 
   // Delete token
-  deleteTokenBtn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "DELETE_TOKEN" }, () => {
-      showDisconnected();
-    });
+  deleteTokenBtn.addEventListener("click", async () => {
+    await sendMsg({ type: "DELETE_TOKEN" });
+    showDisconnected();
   });
 
   // Refresh token status
-  refreshTokenBtn.addEventListener("click", () => {
+  refreshTokenBtn.addEventListener("click", async () => {
     refreshTokenBtn.disabled = true;
     refreshTokenBtn.textContent = "...";
-    chrome.runtime.sendMessage({ type: "GET_TOKEN" }, (resp) => {
-      if (resp && resp.token) {
-        chrome.runtime.sendMessage(
-          { type: "VALIDATE_TOKEN", token: resp.token },
-          (validation) => {
-            refreshTokenBtn.disabled = false;
-            refreshTokenBtn.textContent = "Refresh";
-            if (validation && validation.valid) {
-              showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
-            } else {
-              showDisconnected();
-              tokenStatus.textContent = "Token expired or revoked. Please create a new one.";
-              tokenStatus.className = "status error";
-            }
-          }
-        );
+
+    const stored = await sendMsg({ type: "GET_TOKEN" });
+    if (stored && stored.token) {
+      const validation = await sendMsg({ type: "VALIDATE_TOKEN", token: stored.token });
+      refreshTokenBtn.disabled = false;
+      refreshTokenBtn.textContent = "Refresh";
+      if (validation && validation.valid) {
+        showConnected(validation.user, validation.rateLimit, validation.rateRemaining);
       } else {
-        refreshTokenBtn.disabled = false;
-        refreshTokenBtn.textContent = "Refresh";
-        showDisconnected();
+        showDisconnected("Token expired or revoked. Please create a new one.");
       }
-    });
+    } else {
+      refreshTokenBtn.disabled = false;
+      refreshTokenBtn.textContent = "Refresh";
+      showDisconnected();
+    }
   });
 
   // Allow Enter in token input
@@ -158,18 +159,14 @@ document.addEventListener("DOMContentLoaded", () => {
     resultDiv.innerHTML =
       '<div class="status">Analyzing stargazer profiles...</div>';
 
-    try {
-      const result = await chrome.runtime.sendMessage({
-        type: "ANALYZE_REPO",
-        owner,
-        repo,
-      });
+    const result = await sendMsg({ type: "ANALYZE_REPO", owner, repo });
+    checkBtn.disabled = false;
+    checkBtn.textContent = "Check";
+
+    if (result && result._error) {
+      resultDiv.innerHTML = `<div class="status error">Error: ${result._error}</div>`;
+    } else {
       renderResult(result);
-    } catch (err) {
-      resultDiv.innerHTML = `<div class="status error">Error: ${err.message}</div>`;
-    } finally {
-      checkBtn.disabled = false;
-      checkBtn.textContent = "Check";
     }
   });
 
