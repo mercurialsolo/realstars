@@ -62,6 +62,7 @@ async function handleAnalyze(owner, repo, pageData) {
       description: pageData.description || "",
       defaultBranch: pageData.defaultBranch || "main",
       fullName: `${owner}/${repo}`,
+      isPrivate: !!pageData.isPrivate,
     };
     if (repoInfo.watchers == null || repoInfo.watchers === 0) {
       try {
@@ -73,6 +74,11 @@ async function handleAnalyze(owner, repo, pageData) {
     }
   } else {
     repoInfo = await fetchRepoInfo(owner, repo, token);
+  }
+
+  // --- Private repo check ---
+  if (repoInfo.isPrivate) {
+    return { hide: true, reason: "private" };
   }
 
   // --- MIN_STARS check ---

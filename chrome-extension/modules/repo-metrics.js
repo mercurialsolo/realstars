@@ -24,6 +24,7 @@ export async function fetchRepoInfo(owner, repo, token) {
     description: data.description,
     defaultBranch: data.default_branch,
     fullName: data.full_name,
+    isPrivate: !!data.private,
   };
   setCache(key, result);
   return result;

@@ -43,6 +43,16 @@
     return isNaN(n) ? null : n;
   }
 
+  function isPrivateRepo() {
+    // GitHub renders a "Private" label/badge on private repo pages
+    const label = document.querySelector(".Label--secondary");
+    if (label && label.textContent.trim().toLowerCase() === "private") return true;
+    // Also check the repo visibility span used in newer layouts
+    const visibility = document.querySelector("[data-testid='repo-title-component'] .Label");
+    if (visibility && visibility.textContent.trim().toLowerCase() === "private") return true;
+    return false;
+  }
+
   function scrapePageCounts() {
     let stars = null,
       forks = null,
@@ -528,8 +538,13 @@
 
     removeBadge();
 
+    // Skip private repositories entirely
+    if (isPrivateRepo()) return;
+
     const pageData = scrapePageCounts();
     if (pageData.stars !== null && pageData.stars < MIN_STARS) return;
+
+    pageData.isPrivate = isPrivateRepo();
 
     const badge = createBadge();
     let injected = false;
