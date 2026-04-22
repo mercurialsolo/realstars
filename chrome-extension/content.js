@@ -197,8 +197,11 @@
   }
 
   function getSeverityForSubscore(subscore) {
-    if (subscore >= 80) return "ok";
-    if (subscore >= 50) return "medium";
+    if (subscore == null) return "neutral";
+    // Module subscores are 0-1 floats; convert to 0-100 scale
+    const scaled = subscore <= 1 ? subscore * 100 : subscore;
+    if (scaled >= 80) return "ok";
+    if (scaled >= 50) return "medium";
     return "high";
   }
 
@@ -216,6 +219,7 @@
   function getSeverityColor(severity) {
     if (severity === "ok") return "#4ac26b";
     if (severity === "medium") return "#d4a72c";
+    if (severity === "neutral") return "#656d76";
     return "#ff4a4a";
   }
 
@@ -236,8 +240,14 @@
     const severity = getSeverityForSubscore(subscore);
     const dotColor = getSeverityColor(severity);
     const signalItems = (signals || []).map(buildSignalItem).join("");
+    // Scale 0-1 subscores to 0-100 for display
+    const scaledScore = subscore != null ? Math.round((subscore <= 1 ? subscore * 100 : subscore)) : null;
     const scoreDisplay =
-      subscore != null ? `<span class="rs-cat-score">${subscore}/100</span>` : "";
+      scaledScore != null ? `<span class="rs-cat-score">${scaledScore}/100</span>` : "";
+
+    const bodyContent = subscore == null
+      ? '<div class="rs-no-signals">Not analyzed at this depth</div>'
+      : (signalItems || '<div class="rs-no-signals">No signals detected</div>');
 
     return `
       <div class="rs-category" data-category="${id}">
@@ -253,7 +263,7 @@
           </span>
         </button>
         <div class="rs-cat-body">
-          ${signalItems || '<div class="rs-no-signals">No signals detected</div>'}
+          ${bodyContent}
         </div>
       </div>
     `;
@@ -405,13 +415,6 @@
         "Username Patterns",
         usernameSub.subscore,
         usernameSub.signals
-      ),
-      buildCategory(
-        "community_health",
-        "\u{1F465}",
-        "Community Health",
-        communitySub.subscore,
-        communitySub.signals
       ),
       buildCategory(
         "crossPlatform",

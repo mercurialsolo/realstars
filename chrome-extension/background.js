@@ -115,10 +115,12 @@ async function handleAnalyze(owner, repo, pageData) {
   let profiles = null;
   try {
     profiles = await sampleStargazerProfiles(owner, repo, token, profileSampleSize, repoInfo.stars);
+    console.log(`[RealStars] Fetched ${profiles ? profiles.length : 0} profiles for ${owner}/${repo}`);
   } catch (e) {
     if (e.message.startsWith("RATE_LIMITED")) {
       return buildPartialResult(repoInfo, metricsResult, e);
     }
+    console.warn("[RealStars] Profile fetch failed:", e.message || e);
   }
 
   // --- Run remaining modules, continuing on failure ---
@@ -247,6 +249,8 @@ async function runModule(fn) {
   } catch (e) {
     if (e.message && e.message.startsWith("RATE_LIMITED")) {
       // Swallow — continue with remaining modules
+    } else {
+      console.warn("[RealStars] Module error:", e.message || e);
     }
     return null;
   }
@@ -255,7 +259,8 @@ async function runModule(fn) {
 function runSync(fn) {
   try {
     return fn() || null;
-  } catch {
+  } catch (e) {
+    console.warn("[RealStars] Sync module error:", e.message || e);
     return null;
   }
 }
