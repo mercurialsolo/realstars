@@ -1,8 +1,8 @@
 // RealStars - Popup Script
 
-// GitHub token creation URL with pre-selected scopes (read-only public_repo)
+// GitHub token creation URL without repo scopes; public API reads only need authentication.
 const TOKEN_CREATE_URL =
-  "https://github.com/settings/tokens/new?description=RealStars%20Star%20Fact%20Checker&scopes=public_repo";
+  "https://github.com/settings/tokens/new?description=RealStars%20Star%20Fact%20Checker";
 
 // Promise wrapper for chrome.runtime.sendMessage to avoid callback nesting
 function sendMsg(msg) {
@@ -15,6 +15,26 @@ function sendMsg(msg) {
       }
     });
   });
+}
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[ch]));
+}
+
+function safeSeverity(severity) {
+  return ["ok", "low", "medium", "high", "neutral"].includes(severity)
+    ? severity
+    : "neutral";
+}
+
+function safeGrade(grade) {
+  return ["A", "B", "C", "D", "F"].includes(grade) ? grade : "C";
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -164,7 +184,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     checkBtn.textContent = "Check";
 
     if (result && result._error) {
-      resultDiv.innerHTML = `<div class="status error">Error: ${result._error}</div>`;
+      resultDiv.innerHTML = `<div class="status error">Error: ${escapeHTML(result._error)}</div>`;
     } else {
       renderResult(result);
     }
@@ -175,9 +195,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   function renderResult(result) {
+    if (!result) {
+      resultDiv.innerHTML = '<div class="status error">No response from extension background worker.</div>';
+      return;
+    }
+
     if (result.hide) {
-      resultDiv.innerHTML =
-        '<div class="status">Repo has fewer than 10 stars — not enough data to analyze.</div>';
+      const message = result.reason === "private"
+        ? "Private repositories are not analyzed."
+        : "Repo has fewer than 10 stars — not enough data to analyze.";
+      resultDiv.innerHTML = `<div class="status">${escapeHTML(message)}</div>`;
       return;
     }
 
@@ -186,12 +213,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         const resetTime = new Date(result.resetAt * 1000).toLocaleTimeString();
         resultDiv.innerHTML = `<div class="status error">Rate limited. Resets at ${resetTime}. Add a GitHub token for higher limits.</div>`;
       } else {
-        resultDiv.innerHTML = `<div class="status error">${result.error}</div>`;
+        resultDiv.innerHTML = `<div class="status error">${escapeHTML(result.error)}</div>`;
       }
       return;
     }
 
+    if (!result.trust) {
+      resultDiv.innerHTML = '<div class="status error">Analysis did not return a trust score.</div>';
+      return;
+    }
+
     const { trust } = result;
+    const grade = safeGrade(trust.grade);
+    const score = Number.isFinite(Number(trust.score)) ? Number(trust.score) : 0;
     const gradeColors = {
       A: { bg: "#dafbe1", fg: "#116329", border: "#4ac26b" },
       B: { bg: "#ddf4ff", fg: "#0550ae", border: "#54aeff" },
@@ -199,25 +233,28 @@ document.addEventListener("DOMContentLoaded", async () => {
       D: { bg: "#ffebe9", fg: "#82071e", border: "#ff8182" },
       F: { bg: "#ffcecb", fg: "#6e011a", border: "#ff4a4a" },
     };
-    const c = gradeColors[trust.grade];
+    const c = gradeColors[grade];
 
-    const signalsHTML = trust.signals
+    const signalsHTML = (trust.signals || [])
       .map(
-        (s) => `
+        (s) => {
+          const severity = safeSeverity(s.severity);
+          return `
         <div class="signal-item">
-          <span><span class="signal-dot ${s.severity}"></span>${s.signal}</span>
-          <span style="font-family:monospace;font-weight:600">${s.value}</span>
+          <span><span class="signal-dot ${severity}"></span>${escapeHTML(s.signal)}</span>
+          <span style="font-family:monospace;font-weight:600">${escapeHTML(s.value)}</span>
         </div>
-      `
+      `;
+        }
       )
       .join("");
 
     resultDiv.innerHTML = `
       <div class="score-bar" style="background:${c.bg}">
-        <div class="grade-display" style="color:${c.fg};border-color:${c.border}">${trust.grade}</div>
+        <div class="grade-display" style="color:${c.fg};border-color:${c.border}">${grade}</div>
         <div class="score-info">
-          <div class="label" style="color:${c.fg}">${trust.label}</div>
-          <div class="score-num">Score: ${trust.score}/100</div>
+          <div class="label" style="color:${c.fg}">${escapeHTML(trust.label)}</div>
+          <div class="score-num">Score: ${score}/100</div>
         </div>
       </div>
       <div class="signal-list">${signalsHTML}</div>

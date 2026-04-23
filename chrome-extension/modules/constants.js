@@ -31,6 +31,7 @@ export const MODULE_COSTS = {
 
 export function determineAnalysisDepth(hasToken, apiCallsRemaining) {
   if (!hasToken) return "quick";
+  if (apiCallsRemaining == null) return "deep";
   if (apiCallsRemaining < 100) return "standard";
   return "deep";
 }

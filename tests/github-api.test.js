@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach, mock } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { githubFetch, resetApiState } from "../chrome-extension/modules/github-api.js";
 
@@ -81,7 +81,7 @@ describe("githubFetch", () => {
       { ok: false, status: 500, statusText: "Internal Server Error", headers: {} },
       { ok: true, body: { recovered: true }, headers: {} },
     ]);
-    const result = await githubFetch("https://api.github.com/test", null);
+    const result = await githubFetch("https://api.github.com/test", null, { baseDelayMs: 0 });
     assert.deepEqual(result, { recovered: true });
     assert.ok(getCallCount() >= 2);
   });
@@ -91,7 +91,7 @@ describe("githubFetch", () => {
       { networkError: true },
       { ok: true, body: { recovered: true }, headers: {} },
     ]);
-    const result = await githubFetch("https://api.github.com/test", null);
+    const result = await githubFetch("https://api.github.com/test", null, { baseDelayMs: 0 });
     assert.deepEqual(result, { recovered: true });
     assert.ok(getCallCount() >= 2);
   });
@@ -109,6 +109,21 @@ describe("githubFetch", () => {
     assert.equal(getCallCount(), 1);
   });
 
+  it("throws normal 403 when the response is not a rate limit", async () => {
+    const getCallCount = mockFetch([{
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "x-ratelimit-remaining": "42" },
+      body: { message: "Resource not accessible" },
+    }]);
+    await assert.rejects(
+      () => githubFetch("https://api.github.com/test", null, { baseDelayMs: 0 }),
+      (err) => err.message === "GitHub API 403: Resource not accessible"
+    );
+    assert.equal(getCallCount(), 1);
+  });
+
   it("throws after max retries on persistent 500", async () => {
     mockFetch([
       { ok: false, status: 500, statusText: "Error", headers: {} },
@@ -117,7 +132,7 @@ describe("githubFetch", () => {
       { ok: false, status: 500, statusText: "Error", headers: {} },
     ]);
     await assert.rejects(
-      () => githubFetch("https://api.github.com/test", null),
+      () => githubFetch("https://api.github.com/test", null, { baseDelayMs: 0 }),
       (err) => err.message.includes("500")
     );
   });

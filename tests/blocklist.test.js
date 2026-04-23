@@ -60,6 +60,22 @@ describe("analyzeBlocklist", () => {
     assert.ok(result.matched.includes("knownbot"));
   });
 
+  it("matches exact usernames and regex patterns from bundled blocklist shape", () => {
+    const profiles = [
+      { login: "KnownBot" },
+      { login: "farm-12345" },
+      { login: "alice" },
+    ];
+    const blocklist = {
+      exactUsernames: ["knownbot"],
+      usernamePatterns: ["^farm-[0-9]+$"],
+    };
+    const result = analyzeBlocklist(profiles, blocklist);
+    assert.equal(result.matchCount, 2);
+    assert.ok(result.matched.includes("knownbot"));
+    assert.ok(result.matched.includes("farm-12345"));
+  });
+
   it("flags high percentage (>10%)", () => {
     const profiles = [
       { login: "user111" },

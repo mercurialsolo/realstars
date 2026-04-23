@@ -418,6 +418,11 @@
   background: #f6fef8;
 }
 
+#realstars-panel .rs-signal-item.severity-low {
+  border-left-color: #bf8700;
+  background: #fff8c5;
+}
+
 #realstars-panel .rs-signal-item.severity-medium {
   border-left-color: #d4a72c;
   background: #fffef5;
@@ -656,6 +661,11 @@
   #realstars-panel .rs-signal-item.severity-ok {
     border-left-color: #4ac26b;
     background: #0d2818;
+  }
+
+  #realstars-panel .rs-signal-item.severity-low {
+    border-left-color: #bf8700;
+    background: #3d2e00;
   }
 
   #realstars-panel .rs-signal-item.severity-medium {

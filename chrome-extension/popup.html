@@ -128,8 +128,10 @@
       margin-right: 4px;
     }
     .signal-dot.ok { background: #4ac26b; }
+    .signal-dot.low { background: #bf8700; }
     .signal-dot.medium { background: #d4a72c; }
     .signal-dot.high { background: #ff4a4a; }
+    .signal-dot.neutral { background: #656d76; }
 
     .footer {
       padding: 10px 16px;
@@ -256,7 +258,7 @@
       </div>
       <div class="status" id="token-status"></div>
       <p class="info-text" style="margin-top: 4px;">
-        Optional. Token only needs read-only <code>public_repo</code> access.<br>
+        Optional. Token only needs read access for public GitHub data.<br>
         Increases limit to 5,000 requests/hour for deeper analysis.
       </p>
     </div>

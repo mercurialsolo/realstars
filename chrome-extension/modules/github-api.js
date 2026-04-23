@@ -1,6 +1,6 @@
 // GitHub API fetch with rate-limit tracking and retry with exponential backoff
 
-let apiCallsRemaining = 60; // Conservative default (unauthenticated)
+let apiCallsRemaining = null; // Unknown until GitHub returns rate-limit headers.
 let apiResetTime = 0;
 
 export function getApiCallsRemaining() {
@@ -12,7 +12,7 @@ export function getApiResetTime() {
 }
 
 export function resetApiState() {
-  apiCallsRemaining = 60;
+  apiCallsRemaining = null;
   apiResetTime = 0;
 }
 
@@ -29,8 +29,8 @@ function sleep(ms) {
  *  - Rate-limit errors (403/429) are never retried — they throw immediately
  */
 export async function githubFetch(url, token, options = {}) {
-  const maxRetries = 3;
-  const baseDelayMs = 1000;
+  const maxRetries = options.maxRetries ?? 3;
+  const baseDelayMs = options.baseDelayMs ?? 1000;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -44,14 +44,35 @@ export async function githubFetch(url, token, options = {}) {
       // Track rate limit from response headers
       const remaining = resp.headers.get("x-ratelimit-remaining");
       const reset = resp.headers.get("x-ratelimit-reset");
-      if (remaining !== null) apiCallsRemaining = parseInt(remaining, 10);
-      if (reset !== null) apiResetTime = parseInt(reset, 10);
+      const parsedRemaining = remaining !== null ? parseInt(remaining, 10) : null;
+      if (parsedRemaining !== null && !Number.isNaN(parsedRemaining)) {
+        apiCallsRemaining = parsedRemaining;
+      }
+      if (reset !== null) {
+        const parsedReset = parseInt(reset, 10);
+        if (!Number.isNaN(parsedReset)) apiResetTime = parsedReset;
+      }
 
       if (resp.ok) return resp.json();
 
-      // Rate limited — throw immediately, never retry
-      if (resp.status === 403 || resp.status === 429) {
-        throw new Error(`RATE_LIMITED:${reset || 0}`);
+      let errorMessage = resp.statusText || "";
+      try {
+        const body = await resp.json();
+        if (body && typeof body.message === "string") {
+          errorMessage = body.message;
+        }
+      } catch {
+        // Some error responses have no JSON body.
+      }
+
+      // Rate limited — throw immediately, never retry. Not every 403 is a
+      // rate limit; private/forbidden resources should surface as 403s.
+      const looksRateLimited =
+        resp.status === 429 ||
+        (resp.status === 403 &&
+          (parsedRemaining === 0 || /rate limit|secondary rate/i.test(errorMessage)));
+      if (looksRateLimited) {
+        throw new Error(`RATE_LIMITED:${reset || apiResetTime || 0}`);
       }
 
       // Server errors (5xx) — retry with backoff
@@ -60,7 +81,7 @@ export async function githubFetch(url, token, options = {}) {
         continue;
       }
 
-      throw new Error(`GitHub API ${resp.status}: ${resp.statusText}`);
+      throw new Error(`GitHub API ${resp.status}: ${errorMessage || resp.statusText}`);
     } catch (err) {
       // Never retry rate limits or known client errors
       if (err.message.startsWith("RATE_LIMITED")) throw err;

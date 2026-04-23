@@ -25,14 +25,89 @@ import { getHistorical, saveHistorical } from "./modules/historical.js";
 
 let knownFarmsBlocklist = [];
 
-try {
-  chrome.storage.local.get("knownFarmsBlocklist", (result) => {
-    if (result.knownFarmsBlocklist && Array.isArray(result.knownFarmsBlocklist)) {
-      knownFarmsBlocklist = result.knownFarmsBlocklist;
+const knownFarmsReady = loadKnownFarmsBlocklist();
+
+function mergeKnownFarms(...sources) {
+  const exactUsernames = new Set();
+  const usernamePatterns = [];
+
+  for (const source of sources) {
+    if (!source) continue;
+
+    if (Array.isArray(source)) {
+      for (const username of source) {
+        if (typeof username === "string" && username.trim()) {
+          exactUsernames.add(username.trim().toLowerCase());
+        }
+      }
+      continue;
     }
-  });
-} catch (_) {
-  // Extension storage not available in some contexts
+
+    if (typeof source !== "object") continue;
+
+    const exact = Array.isArray(source.exactUsernames) ? source.exactUsernames : [];
+    for (const username of exact) {
+      if (typeof username === "string" && username.trim()) {
+        exactUsernames.add(username.trim().toLowerCase());
+      }
+    }
+
+    const patterns = Array.isArray(source.usernamePatterns) ? source.usernamePatterns : [];
+    for (const pattern of patterns) {
+      if (typeof pattern === "string" && pattern.trim()) {
+        usernamePatterns.push(pattern.trim());
+      }
+    }
+  }
+
+  return { exactUsernames: [...exactUsernames], usernamePatterns };
+}
+
+async function loadKnownFarmsBlocklist() {
+  let stored = null;
+  let bundled = null;
+
+  try {
+    const result = await chrome.storage.local.get("knownFarmsBlocklist");
+    stored = result.knownFarmsBlocklist || null;
+  } catch {
+    // Extension storage not available in some contexts.
+  }
+
+  try {
+    const resp = await fetch(chrome.runtime.getURL("known-farms.json"));
+    if (resp.ok) bundled = await resp.json();
+  } catch {
+    // Bundled blocklist is optional defense-in-depth data.
+  }
+
+  knownFarmsBlocklist = mergeKnownFarms(bundled, stored);
+}
+
+async function getStoredToken() {
+  try {
+    const local = await chrome.storage.local.get("githubToken");
+    if (local.githubToken) return local.githubToken;
+  } catch {
+    // Fall through to legacy sync storage.
+  }
+
+  try {
+    const legacy = await chrome.storage.sync.get("githubToken");
+    if (legacy.githubToken) {
+      try {
+        await chrome.storage.local.set({ githubToken: legacy.githubToken });
+        await chrome.storage.sync.remove("githubToken");
+      } catch {
+        // If migration fails, still use the token for this request.
+      }
+      return legacy.githubToken;
+    }
+  } catch {
+    // No token available.
+  }
+
+  return "";
 }
 
 // =============================================================================
@@ -40,12 +115,7 @@ try {
 // =============================================================================
 
 async function handleAnalyze(owner, repo, pageData) {
-  const fullCacheKey = `analysis:${owner}/${repo}`;
-  const cachedResult = getCached(fullCacheKey);
-  if (cachedResult) return cachedResult;
-
-  const { githubToken } = await chrome.storage.sync.get("githubToken");
-  const token = githubToken || null;
+  const token = await getStoredToken();
   const hasToken = !!token;
 
   // --- Fetch repo info ---
@@ -86,6 +156,16 @@ async function handleAnalyze(owner, repo, pageData) {
     return { hide: true };
   }
 
+  // --- Determine analysis depth ---
+  const analysisDepth = repoInfo.stars < SMALL_REPO_THRESHOLD
+    ? "quick"
+    : determineAnalysisDepth(hasToken, getApiCallsRemaining());
+
+  // Cache by depth so a quick anonymous result does not mask a deeper token-backed result.
+  const fullCacheKey = `analysis:${owner}/${repo}:${analysisDepth}`;
+  const cachedResult = getCached(fullCacheKey);
+  if (cachedResult) return cachedResult;
+
   // --- Small repo: only ratio signals ---
   if (repoInfo.stars < SMALL_REPO_THRESHOLD) {
     const metricsResult = analyzeRepoMetrics(repoInfo);
@@ -104,8 +184,6 @@ async function handleAnalyze(owner, repo, pageData) {
     return result;
   }
 
-  // --- Determine analysis depth ---
-  const analysisDepth = determineAnalysisDepth(hasToken, getApiCallsRemaining());
   const profileSampleSize = getProfileSampleSize(analysisDepth, repoInfo.stars);
 
   // --- Module 1: Repo Metrics ---
@@ -153,6 +231,7 @@ async function handleAnalyze(owner, repo, pageData) {
           analyzeVelocityVsReleases(owner, repo, token, starTimingResult.bursts)
   );
 
+  await knownFarmsReady;
   const blocklistResult = runSync(
     () => profiles && profiles.length > 0 && analyzeBlocklist(profiles, knownFarmsBlocklist)
   );
@@ -327,23 +406,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === "GET_TOKEN") {
-    chrome.storage.sync.get("githubToken", (result) => {
-      sendResponse({ token: result.githubToken || "" });
-    });
+    getStoredToken()
+      .then((token) => sendResponse({ token: token || "" }))
+      .catch((err) => sendResponse({ token: "", error: err.message }));
     return true;
   }
 
   if (msg.type === "SET_TOKEN") {
-    chrome.storage.sync.set({ githubToken: msg.token }, () => {
-      sendResponse({ ok: true });
-    });
+    chrome.storage.local.set({ githubToken: msg.token })
+      .then(() => chrome.storage.sync.remove("githubToken"))
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 
   if (msg.type === "DELETE_TOKEN") {
-    chrome.storage.sync.remove("githubToken", () => {
-      sendResponse({ ok: true });
-    });
+    Promise.allSettled([
+      chrome.storage.local.remove("githubToken"),
+      chrome.storage.sync.remove("githubToken"),
+    ])
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 

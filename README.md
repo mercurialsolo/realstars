@@ -71,7 +71,7 @@ RealStars works out of the box with no setup. It uses GitHub's public API which 
 For heavier use (checking many repos, deeper profile sampling), add a token to get **5,000 requests/hour**:
 
 1. Click the RealStars icon in your toolbar
-2. Click **"Create token on GitHub (1 click)"** — this opens GitHub's token page with the correct permissions pre-selected (`public_repo`, read-only)
+2. Click **"Create token on GitHub (1 click)"** — this opens GitHub's token page without requesting repository scopes
 3. On GitHub, click **Generate token** and copy it
 4. Paste the token back in RealStars and click **Save**
 5. RealStars validates the token and shows your username + remaining rate limit
@@ -80,7 +80,7 @@ For heavier use (checking many repos, deeper profile sampling), add a token to g
 - **Refresh** — Check current rate limit and validate token is still active
 - **Delete** — Remove the token and go back to unauthenticated mode
 
-The token is stored locally in Chrome's sync storage. It never leaves your browser except to authenticate with GitHub's API.
+The token is stored in Chrome's local extension storage. It never leaves your browser except to authenticate with GitHub's API.
 
 ---
 

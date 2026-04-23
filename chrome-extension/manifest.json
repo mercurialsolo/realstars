@@ -4,7 +4,11 @@
   "version": "1.0.0",
   "description": "Detects fake GitHub stars using signals from CMU's StarScout research. Shows trust scores on repo pages.",
   "permissions": ["storage"],
-  "host_permissions": ["https://api.github.com/*"],
+  "host_permissions": [
+    "https://api.github.com/*",
+    "https://api.npmjs.org/*",
+    "https://pypistats.org/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

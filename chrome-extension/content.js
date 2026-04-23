@@ -17,16 +17,27 @@
     const repo = match[2];
     const excluded = [
       "settings",
+      "account",
+      "codespaces",
+      "dashboard",
+      "features",
+      "gist",
+      "gists",
+      "issues",
       "marketplace",
       "explore",
       "topics",
       "trending",
       "collections",
       "events",
+      "orgs",
+      "pulls",
+      "search",
       "sponsors",
       "notifications",
       "new",
       "organizations",
+      "enterprises",
       "login",
       "signup",
     ];
@@ -36,7 +47,7 @@
 
   function parseCount(text) {
     if (!text) return null;
-    text = text.trim().replace(/,/g, "");
+    text = text.trim().replace(/,/g, "").toLowerCase();
     if (text.endsWith("k")) return Math.round(parseFloat(text) * 1000);
     if (text.endsWith("m")) return Math.round(parseFloat(text) * 1000000);
     const n = parseInt(text, 10);
@@ -95,6 +106,33 @@
     return typeof n === "number" ? n.toFixed(places) : String(n);
   }
 
+  function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[ch]));
+  }
+
+  function safeSeverity(severity) {
+    return ["ok", "low", "medium", "high", "neutral"].includes(severity)
+      ? severity
+      : "neutral";
+  }
+
+  function safeGrade(grade) {
+    return ["A", "B", "C", "D", "F"].includes(grade) ? grade : "C";
+  }
+
+  function scaleSubscore(subscore) {
+    if (subscore == null || subscore === undefined) return null;
+    const numeric = Number(subscore);
+    if (!Number.isFinite(numeric)) return null;
+    return Math.max(0, Math.min(100, numeric <= 1 ? numeric * 100 : numeric));
+  }
+
   // --- Badge logic ---
 
   function removeBadge() {
@@ -138,6 +176,12 @@
     const badge = document.getElementById("realstars-badge");
     if (!badge) return;
 
+    if (!result) {
+      badge.className = "loading";
+      badge.innerHTML = '<span class="rs-icon">&#x26A0;</span> No analysis response';
+      return;
+    }
+
     if (result.hide) {
       removeBadge();
       return;
@@ -149,23 +193,30 @@
         const resetTime = new Date(result.resetAt * 1000).toLocaleTimeString();
         badge.innerHTML = `<span class="rs-icon">&#x26A0;</span> Rate limited (resets ${resetTime})`;
       } else {
-        badge.innerHTML = `<span class="rs-icon">&#x26A0;</span> ${result.error}`;
+        badge.innerHTML = `<span class="rs-icon">&#x26A0;</span> ${escapeHTML(result.error)}`;
       }
       return;
     }
 
     const { trust, historical } = result;
-    badge.className = `grade-${trust.grade}`;
+    if (!trust) {
+      badge.className = "loading";
+      badge.innerHTML = '<span class="rs-icon">&#x26A0;</span> No trust score';
+      return;
+    }
+    const grade = safeGrade(trust.grade);
+    const score = Number.isFinite(Number(trust.score)) ? Number(trust.score) : 0;
+    badge.className = `grade-${grade}`;
 
     let trendArrow = "";
     if (historical && historical.previousScore != null) {
-      const diff = trust.score - historical.previousScore;
+      const diff = score - historical.previousScore;
       if (diff > 2) trendArrow = " \u2191";
       else if (diff < -2) trendArrow = " \u2193";
       else trendArrow = " \u2192";
     }
 
-    badge.innerHTML = `<span class="rs-icon">\u2B50</span> RealStars: ${trust.grade} (${trust.score}/100)${trendArrow}`;
+    badge.innerHTML = `<span class="rs-icon">\u2B50</span> RealStars: ${grade} (${score}/100)${trendArrow}`;
     badge.dataset.result = JSON.stringify(result);
   }
 
@@ -197,9 +248,8 @@
   }
 
   function getSeverityForSubscore(subscore) {
-    if (subscore == null) return "neutral";
-    // Module subscores are 0-1 floats; convert to 0-100 scale
-    const scaled = subscore <= 1 ? subscore * 100 : subscore;
+    const scaled = scaleSubscore(subscore);
+    if (scaled == null) return "neutral";
     if (scaled >= 80) return "ok";
     if (scaled >= 50) return "medium";
     return "high";
@@ -218,20 +268,21 @@
 
   function getSeverityColor(severity) {
     if (severity === "ok") return "#4ac26b";
+    if (severity === "low") return "#bf8700";
     if (severity === "medium") return "#d4a72c";
     if (severity === "neutral") return "#656d76";
     return "#ff4a4a";
   }
 
   function buildSignalItem(signal) {
-    const severity = signal.severity || "ok";
+    const severity = safeSeverity(signal.severity || "ok");
     return `
       <div class="rs-signal-item severity-${severity}">
         <div class="rs-signal-row">
-          <span class="rs-signal-name">${signal.signal || signal.name || ""}</span>
-          <span class="rs-signal-value">${signal.value != null ? signal.value : ""}</span>
+          <span class="rs-signal-name">${escapeHTML(signal.signal || signal.name || "")}</span>
+          <span class="rs-signal-value">${escapeHTML(signal.value != null ? signal.value : "")}</span>
         </div>
-        ${signal.detail ? `<div class="rs-signal-detail">${signal.detail}</div>` : ""}
+        ${signal.detail ? `<div class="rs-signal-detail">${escapeHTML(signal.detail)}</div>` : ""}
       </div>
     `;
   }
@@ -241,21 +292,21 @@
     const dotColor = getSeverityColor(severity);
     const signalItems = (signals || []).map(buildSignalItem).join("");
     // Scale 0-1 subscores to 0-100 for display
-    const scaledScore = subscore != null ? Math.round((subscore <= 1 ? subscore * 100 : subscore)) : null;
+    const scaledScore = scaleSubscore(subscore);
     const scoreDisplay =
-      scaledScore != null ? `<span class="rs-cat-score">${scaledScore}/100</span>` : "";
+      scaledScore != null ? `<span class="rs-cat-score">${Math.round(scaledScore)}/100</span>` : "";
 
     const bodyContent = subscore == null
       ? '<div class="rs-no-signals">Not analyzed at this depth</div>'
       : (signalItems || '<div class="rs-no-signals">No signals detected</div>');
 
     return `
-      <div class="rs-category" data-category="${id}">
+      <div class="rs-category" data-category="${escapeHTML(id)}">
         <button class="rs-cat-header" aria-expanded="false">
           <span class="rs-cat-left">
             <span class="rs-cat-arrow">\u25B6</span>
-            <span class="rs-cat-icon">${icon}</span>
-            <span class="rs-cat-title">${title}</span>
+            <span class="rs-cat-icon">${escapeHTML(icon)}</span>
+            <span class="rs-cat-title">${escapeHTML(title)}</span>
           </span>
           <span class="rs-cat-right">
             ${scoreDisplay}
@@ -271,6 +322,7 @@
 
   function buildBreakdownBar(result) {
     const categories = [
+      { key: "repoMetrics", label: "Ratios", color: "#64748b" },
       { key: "starTiming", label: "Timing", color: "#6366f1" },
       { key: "profiles", label: "Profiles", color: "#8b5cf6" },
       { key: "community", label: "Community", color: "#06b6d4" },
@@ -284,25 +336,26 @@
     ];
 
     const weights = result.trust && result.trust.weights ? result.trust.weights : {};
-    let segments = [];
-    let totalWeight = 0;
+    const subscores = result.trust && result.trust.subscores ? result.trust.subscores : {};
+    const availableCategories = categories.filter(
+      (cat) => (weights[cat.key] || 0) > 0 && scaleSubscore(subscores[cat.key]) != null
+    );
 
-    for (const cat of categories) {
-      const w = weights[cat.key] || 0;
-      if (w > 0) totalWeight += w;
-    }
+    const totalWeight = availableCategories.reduce(
+      (sum, cat) => sum + (weights[cat.key] || 0),
+      0
+    );
 
     if (totalWeight === 0) return "";
 
-    for (const cat of categories) {
+    const segments = [];
+    for (const cat of availableCategories) {
       const w = weights[cat.key] || 0;
-      if (w <= 0) continue;
       const widthPct = (w / totalWeight) * 100;
-      const sub = result[cat.key];
-      const subscore = sub ? sub.subscore : 100;
-      const opacity = subscore != null ? Math.max(0.3, subscore / 100) : 1;
+      const scaledScore = scaleSubscore(subscores[cat.key]);
+      const opacity = scaledScore != null ? Math.max(0.3, scaledScore / 100) : 1;
       segments.push(
-        `<div class="rs-bar-segment" style="width:${widthPct}%;background:${cat.color};opacity:${opacity}" title="${cat.label}: ${subscore != null ? subscore + "/100" : "N/A"} (weight: ${(w * 100).toFixed(0)}%)"></div>`
+        `<div class="rs-bar-segment" style="width:${widthPct}%;background:${cat.color};opacity:${opacity}" title="${escapeHTML(cat.label)}: ${scaledScore != null ? Math.round(scaledScore) + "/100" : "N/A"} (weight: ${(w * 100).toFixed(0)}%)"></div>`
       );
     }
 
@@ -312,10 +365,10 @@
         <div class="rs-breakdown-bar">${segments.join("")}</div>
         <div class="rs-breakdown-legend">
           ${categories
-            .filter((c) => (weights[c.key] || 0) > 0)
+            .filter((c) => availableCategories.some((cat) => cat.key === c.key))
             .map(
               (c) =>
-                `<span class="rs-legend-item"><span class="rs-legend-dot" style="background:${c.color}"></span>${c.label}</span>`
+                `<span class="rs-legend-item"><span class="rs-legend-dot" style="background:${c.color}"></span>${escapeHTML(c.label)}</span>`
             )
             .join("")}
         </div>
@@ -329,7 +382,9 @@
     panel.id = "realstars-panel";
     panel.className = "hidden";
 
-    const gradeColor = getGradeColor(trust.grade);
+    const grade = safeGrade(trust.grade);
+    const score = Number.isFinite(Number(trust.score)) ? Number(trust.score) : 0;
+    const gradeColor = getGradeColor(grade);
 
     // Depth label
     const depthLabels = { quick: "Quick", standard: "Standard", deep: "Deep" };
@@ -338,7 +393,7 @@
     // Historical trend
     let trendHTML = "";
     if (historical && historical.previousScore != null) {
-      const diff = trust.score - historical.previousScore;
+      const diff = score - historical.previousScore;
       let arrow, trendClass;
       if (diff > 2) {
         arrow = "\u2191";
@@ -353,7 +408,7 @@
       trendHTML = `
         <div class="rs-trend ${trendClass}">
           <span class="rs-trend-arrow">${arrow}</span>
-          <span class="rs-trend-text">Previously ${historical.previousScore}/100${historical.previousDate ? " on " + historical.previousDate : ""}</span>
+          <span class="rs-trend-text">Previously ${escapeHTML(historical.previousScore)}/100${historical.previousDate ? " on " + escapeHTML(historical.previousDate) : ""}</span>
         </div>
       `;
     }
@@ -372,8 +427,17 @@
     const geoSub = result.geographic || {};
     const velocitySub = result.velocity || {};
     const blocklistSub = result.blocklist || {};
+    const ratioSignals = (trust.signals || []).filter((signal) => signal.category === "ratio");
+    const repoMetricsSubscore = trust.subscores ? trust.subscores.repoMetrics : null;
 
     const categoriesHTML = [
+      buildCategory(
+        "repoMetrics",
+        "\u2696",
+        "Core Ratios",
+        repoMetricsSubscore,
+        ratioSignals
+      ),
       buildCategory(
         "starTiming",
         "\u23F1",
@@ -460,8 +524,8 @@
       .map(
         (r) => `
       <div class="rs-metric-row">
-        <span class="rs-metric-label">${r.label}</span>
-        <span class="rs-metric-value">${r.value}</span>
+        <span class="rs-metric-label">${escapeHTML(r.label)}</span>
+        <span class="rs-metric-value">${escapeHTML(r.value)}</span>
       </div>
     `
       )
@@ -471,7 +535,7 @@
       <div class="rs-panel-header">
         <div class="rs-header-left">
           <h2 class="rs-panel-title">RealStars Intelligence</h2>
-          <span class="rs-depth-badge">${depthLabel}</span>
+          <span class="rs-depth-badge">${escapeHTML(depthLabel)}</span>
         </div>
         <button class="rs-close-btn" aria-label="Close panel">\u2715</button>
       </div>
@@ -479,10 +543,10 @@
       <div class="rs-panel-content">
         <div class="rs-hero">
           <div class="rs-hero-circle" style="border-color:${gradeColor};color:${gradeColor}">
-            <span class="rs-hero-grade">${trust.grade}</span>
-            <span class="rs-hero-score">${trust.score}/100</span>
+            <span class="rs-hero-grade">${grade}</span>
+            <span class="rs-hero-score">${score}/100</span>
           </div>
-          <div class="rs-hero-label">${trust.label || ""}</div>
+          <div class="rs-hero-label">${escapeHTML(trust.label || "")}</div>
           ${trendHTML}
         </div>
 
@@ -500,8 +564,8 @@
 
       <div class="rs-panel-footer">
         <div class="rs-footer-line">Based on <a href="https://arxiv.org/abs/2412.13459" target="_blank" rel="noopener">CMU StarScout (ICSE 2026)</a></div>
-        <div class="rs-footer-line">Analysis depth: ${depthLabel}</div>
-        <div class="rs-footer-line"><a href="https://github.com/AranavMahalpure/realstars" target="_blank" rel="noopener">GitHub</a></div>
+        <div class="rs-footer-line">Analysis depth: ${escapeHTML(depthLabel)}</div>
+        <div class="rs-footer-line"><a href="https://github.com/mercurialsolo/realstars" target="_blank" rel="noopener">GitHub</a></div>
       </div>
     `;
 

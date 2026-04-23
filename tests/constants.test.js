@@ -26,6 +26,10 @@ describe("determineAnalysisDepth", () => {
     assert.equal(determineAnalysisDepth(true, 4000), "deep");
   });
 
+  it("returns deep with token when budget is not known yet", () => {
+    assert.equal(determineAnalysisDepth(true, null), "deep");
+  });
+
   it("returns standard at exactly 99 remaining", () => {
     assert.equal(determineAnalysisDepth(true, 99), "standard");
   });
